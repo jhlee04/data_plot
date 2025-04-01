@@ -1,14 +1,19 @@
-Sub AnalyzeCorrelationWithTop3_Safe()
+Sub AnalyzeCorrelation_Final()
 
     Dim wsInput As Worksheet
     Dim wsSummary As Worksheet
     Dim wsAll As Worksheet
-    Dim inputCols As Variant
-    Dim outputCols As Variant
+
     Dim lastRow As Long
+    Dim numInputs As Long: numInputs = 29
+    Dim numOutputs As Long: numOutputs = 6
+
+    Dim inputNames() As String
+    Dim outputNames() As String
+
     Dim i As Long, j As Long
 
-    ' 시트 설정
+    ' 시트 지정
     Set wsInput = ThisWorkbook.Sheets("Input")
     On Error Resume Next
     Set wsSummary = ThisWorkbook.Sheets("Output_summary")
@@ -23,104 +28,84 @@ Sub AnalyzeCorrelationWithTop3_Safe()
     End If
     On Error GoTo 0
 
-    ' 입력 범위 (안전하게 배열 변환)
-    inputCols = ToArraySafe(wsInput.Range("A1:AC1")) ' 29개 인풋
-    outputCols = ToArraySafe(wsInput.Range("AD1:AI1")) ' 6개 아웃풋
-
-    ' 데이터가 있는 마지막 행
+    ' 데이터 끝 행 찾기
     lastRow = wsInput.Cells(wsInput.Rows.Count, "A").End(xlUp).Row
 
-    ' 시트 초기화
-    wsSummary.Cells.ClearContents
-    wsAll.Cells.ClearContents
-
-    ' Output_all 시트: 상관계수 매트릭스 출력
-    wsAll.Cells(1, 1).Value = "Output \ Input"
-    For i = LBound(inputCols) To UBound(inputCols)
-        wsAll.Cells(1, i - LBound(inputCols) + 2).Value = inputCols(i)
+    ' 인풋/아웃풋 이름 배열 저장
+    ReDim inputNames(1 To numInputs)
+    For i = 1 To numInputs
+        inputNames(i) = wsInput.Cells(1, i).Value ' A1~AC1
     Next i
 
-    For j = LBound(outputCols) To UBound(outputCols)
-        wsAll.Cells(j - LBound(outputCols) + 2, 1).Value = outputCols(j)
+    ReDim outputNames(1 To numOutputs)
+    For j = 1 To numOutputs
+        outputNames(j) = wsInput.Cells(1, 29 + j).Value ' AD1~AI1
+    Next j
 
-        For i = LBound(inputCols) To UBound(inputCols)
-            Dim inputColIndex As Long: inputColIndex = i ' 1~29 (A~AC)
-            Dim outputColIndex As Long: outputColIndex = 30 + (j - 1) ' AD = 30
+    ' 시트 초기화
+    wsAll.Cells.ClearContents
+    wsSummary.Cells.ClearContents
 
-            Dim corrVal As Double
+    ' Output_all: 헤더
+    For i = 1 To numInputs
+        wsAll.Cells(1, i + 1).Value = inputNames(i)
+    Next i
+    For j = 1 To numOutputs
+        wsAll.Cells(j + 1, 1).Value = outputNames(j)
+    Next j
+
+    ' Output_all: 상관계수 계산
+    For j = 1 To numOutputs
+        For i = 1 To numInputs
+            Dim corr As Double
             On Error Resume Next
-            corrVal = Application.WorksheetFunction.Correl( _
-                wsInput.Range(wsInput.Cells(2, inputColIndex), wsInput.Cells(lastRow, inputColIndex)), _
-                wsInput.Range(wsInput.Cells(2, outputColIndex), wsInput.Cells(lastRow, outputColIndex)))
+            corr = Application.WorksheetFunction.Correl( _
+                wsInput.Range(wsInput.Cells(2, i), wsInput.Cells(lastRow, i)), _
+                wsInput.Range(wsInput.Cells(2, 29 + j), wsInput.Cells(lastRow, 29 + j)))
             On Error GoTo 0
-
-            wsAll.Cells(j - LBound(outputCols) + 2, i - LBound(inputCols) + 2).Value = corrVal
+            wsAll.Cells(j + 1, i + 1).Value = corr
         Next i
     Next j
 
-    ' Output_summary 시트: 상위 3개 인풋
-    wsSummary.Cells(1, 1).Resize(1, 4).Value = Array("Output", "Top1 Input", "Top2 Input", "Top3 Input")
-    wsSummary.Cells(1, 5).Resize(1, 3).Value = Array("Top1 Corr", "Top2 Corr", "Top3 Corr")
+    ' Output_summary: 헤더
+    wsSummary.Range("A1:G1").Value = Array("Output", "Top1 Input", "Top2 Input", "Top3 Input", "Top1 Corr", "Top2 Corr", "Top3 Corr")
 
-    For j = LBound(outputCols) To UBound(outputCols)
+    ' 상위 3개 추출
+    For j = 1 To numOutputs
         Dim corrList() As Variant
-        ReDim corrList(LBound(inputCols) To UBound(inputCols), 1 To 2)
+        ReDim corrList(1 To numInputs, 1 To 2) ' Input 이름, Corr 값
 
-        For i = LBound(inputCols) To UBound(inputCols)
-            corrList(i, 1) = inputCols(i)
-
-            Dim inputColIndex2 As Long: inputColIndex2 = i
-            Dim outputColIndex2 As Long: outputColIndex2 = 30 + (j - 1)
-
-            Dim cVal As Double
-            On Error Resume Next
-            cVal = Application.WorksheetFunction.Correl( _
-                wsInput.Range(wsInput.Cells(2, inputColIndex2), wsInput.Cells(lastRow, inputColIndex2)), _
-                wsInput.Range(wsInput.Cells(2, outputColIndex2), wsInput.Cells(lastRow, outputColIndex2)))
-            On Error GoTo 0
-
-            corrList(i, 2) = cVal
+        For i = 1 To numInputs
+            corrList(i, 1) = inputNames(i)
+            corrList(i, 2) = wsAll.Cells(j + 1, i + 1).Value
         Next i
 
-        ' 절댓값 기준 정렬 (버블 정렬)
-        Dim m As Long, n As Long, temp1 As Variant, temp2 As Variant
-        For m = LBound(corrList) To UBound(corrList) - 1
-            For n = m + 1 To UBound(corrList)
+        ' 절댓값 기준으로 정렬
+        Dim m As Long, n As Long
+        Dim tempName As Variant, tempCorr As Variant
+        For m = 1 To numInputs - 1
+            For n = m + 1 To numInputs
                 If Abs(corrList(n, 2)) > Abs(corrList(m, 2)) Then
-                    temp1 = corrList(m, 1): temp2 = corrList(m, 2)
-                    corrList(m, 1) = corrList(n, 1): corrList(m, 2) = corrList(n, 2)
-                    corrList(n, 1) = temp1: corrList(n, 2) = temp2
+                    tempName = corrList(m, 1)
+                    tempCorr = corrList(m, 2)
+                    corrList(m, 1) = corrList(n, 1)
+                    corrList(m, 2) = corrList(n, 2)
+                    corrList(n, 1) = tempName
+                    corrList(n, 2) = tempCorr
                 End If
             Next n
         Next m
 
-        ' 결과 출력
-        Dim rowOffset As Long: rowOffset = j - LBound(outputCols) + 2
-        wsSummary.Cells(rowOffset, 1).Value = outputCols(j)
-        wsSummary.Cells(rowOffset, 2).Value = corrList(LBound(corrList), 1)
-        wsSummary.Cells(rowOffset, 3).Value = corrList(LBound(corrList) + 1, 1)
-        wsSummary.Cells(rowOffset, 4).Value = corrList(LBound(corrList) + 2, 1)
-        wsSummary.Cells(rowOffset, 5).Value = corrList(LBound(corrList), 2)
-        wsSummary.Cells(rowOffset, 6).Value = corrList(LBound(corrList) + 1, 2)
-        wsSummary.Cells(rowOffset, 7).Value = corrList(LBound(corrList) + 2, 2)
+        ' 상위 3개 기록
+        wsSummary.Cells(j + 1, 1).Value = outputNames(j)
+        wsSummary.Cells(j + 1, 2).Value = corrList(1, 1)
+        wsSummary.Cells(j + 1, 3).Value = corrList(2, 1)
+        wsSummary.Cells(j + 1, 4).Value = corrList(3, 1)
+        wsSummary.Cells(j + 1, 5).Value = corrList(1, 2)
+        wsSummary.Cells(j + 1, 6).Value = corrList(2, 2)
+        wsSummary.Cells(j + 1, 7).Value = corrList(3, 2)
     Next j
 
-    MsgBox "완료! Output_summary 및 Output_all 시트에 결과가 저장되었습니다."
+    MsgBox "완료되었습니다! 'Output_all'과 'Output_summary' 시트를 확인하세요.", vbInformation
 
 End Sub
-
-' 안전한 배열 변환 함수 (Transpose 보정 포함)
-Function ToArraySafe(rng As Range) As Variant
-    Dim arr As Variant
-    arr = rng.Value
-    If IsArray(arr) Then
-        If rng.Columns.Count = 1 Or rng.Rows.Count = 1 Then
-            ToArraySafe = Application.Transpose(Application.Transpose(arr))
-        Else
-            ToArraySafe = arr
-        End If
-    Else
-        ReDim ToArraySafe(1 To 1)
-        ToArraySafe(1) = arr
-    End If
-End Function

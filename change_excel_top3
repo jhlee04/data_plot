@@ -1,0 +1,104 @@
+Sub RunSimpleRegression_Top3()
+
+    Dim wsInput As Worksheet
+    Dim wsAll As Worksheet
+    Dim wsSummary As Worksheet
+    
+    Set wsInput = ThisWorkbook.Sheets("Input")
+    
+    On Error Resume Next
+    Set wsAll = ThisWorkbook.Sheets("Output_all")
+    If wsAll Is Nothing Then
+        Set wsAll = ThisWorkbook.Sheets.Add(After:=wsInput)
+        wsAll.Name = "Output_all"
+    Else
+        wsAll.Cells.Clear
+    End If
+    
+    Set wsSummary = ThisWorkbook.Sheets("Output_summary")
+    If wsSummary Is Nothing Then
+        Set wsSummary = ThisWorkbook.Sheets.Add(After:=wsAll)
+        wsSummary.Name = "Output_summary"
+    Else
+        wsSummary.Cells.Clear
+    End If
+    On Error GoTo 0
+
+    Dim lastRow As Long
+    lastRow = wsInput.Cells(wsInput.Rows.Count, 1).End(xlUp).Row
+
+    Dim numInputs As Long: numInputs = 29
+    Dim numOutputs As Long: numOutputs = 6
+    
+    Dim i As Long, j As Long
+    Dim results As Variant
+    
+    ' Output_all 헤더
+    wsAll.Cells(1, 1).Value = "Output"
+    For i = 1 To numInputs
+        wsAll.Cells(1, i * 4 - 2).Value = "Input_" & i
+        wsAll.Cells(1, i * 4 - 1).Value = "Beta"
+        wsAll.Cells(1, i * 4).Value = "Intercept"
+        wsAll.Cells(1, i * 4 + 1).Value = "R2"
+    Next i
+    
+    ' Output_summary 헤더
+    wsSummary.Range("A1:G1").Value = Array("Output", "Top1_Input", "R2_1", "Top2_Input", "R2_2", "Top3_Input", "R2_3")
+    
+    ' 각 Output에 대해 단순 회귀 분석
+    For j = 1 To numOutputs
+        wsAll.Cells(j + 1, 1).Value = wsInput.Cells(1, 29 + j).Value
+        
+        ' 결과 저장 배열 (Input 이름, R²)
+        Dim R2Array() As Variant
+        ReDim R2Array(1 To numInputs, 1 To 2)
+        
+        For i = 1 To numInputs
+            Dim yRange As Range
+            Dim xRange As Range
+            Set yRange = wsInput.Range(wsInput.Cells(2, 29 + j), wsInput.Cells(lastRow, 29 + j))
+            Set xRange = wsInput.Range(wsInput.Cells(2, i), wsInput.Cells(lastRow, i))
+            
+            results = Application.WorksheetFunction.LinEst(yRange, xRange, True, True)
+            
+            Dim beta As Double, intercept As Double, r2 As Double
+            beta = results(1, 1)
+            intercept = results(1, 2)
+            r2 = results(3, 1)
+            
+            ' Output_all에 기록
+            wsAll.Cells(j + 1, i * 4 - 2).Value = wsInput.Cells(1, i).Value
+            wsAll.Cells(j + 1, i * 4 - 1).Value = beta
+            wsAll.Cells(j + 1, i * 4).Value = intercept
+            wsAll.Cells(j + 1, i * 4 + 1).Value = r2
+            
+            R2Array(i, 1) = wsInput.Cells(1, i).Value
+            R2Array(i, 2) = r2
+        Next i
+        
+        ' R² 기준 내림차순 정렬
+        Dim k As Long, tempName As Variant, tempR2 As Variant
+        For i = 1 To numInputs - 1
+            For k = i + 1 To numInputs
+                If R2Array(i, 2) < R2Array(k, 2) Then
+                    tempName = R2Array(i, 1)
+                    tempR2 = R2Array(i, 2)
+                    R2Array(i, 1) = R2Array(k, 1)
+                    R2Array(i, 2) = R2Array(k, 2)
+                    R2Array(k, 1) = tempName
+                    R2Array(k, 2) = tempR2
+                End If
+            Next k
+        Next i
+        
+        ' 상위 3개 기록
+        wsSummary.Cells(j + 1, 1).Value = wsInput.Cells(1, 29 + j).Value
+        For i = 1 To 3
+            wsSummary.Cells(j + 1, 2 * i).Value = R2Array(i, 1)
+            wsSummary.Cells(j + 1, 2 * i + 1).Value = R2Array(i, 2)
+        Next i
+    Next j
+
+    MsgBox "단순 회귀 분석이 완료되었습니다. Output_all 및 Output_summary 시트를 확인하세요.", vbInformation
+
+End Sub

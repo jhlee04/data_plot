@@ -1,0 +1,94 @@
+Sub RunSimpleRegression()
+
+    Dim wsInput As Worksheet
+    Dim wsAll As Worksheet
+    Dim wsSummary As Worksheet
+    
+    Set wsInput = ThisWorkbook.Sheets("Input")
+    
+    On Error Resume Next
+    Set wsAll = ThisWorkbook.Sheets("Output_all")
+    If wsAll Is Nothing Then
+        Set wsAll = ThisWorkbook.Sheets.Add(After:=wsInput)
+        wsAll.Name = "Output_all"
+    Else
+        wsAll.Cells.Clear
+    End If
+    
+    Set wsSummary = ThisWorkbook.Sheets("Output_summary")
+    If wsSummary Is Nothing Then
+        Set wsSummary = ThisWorkbook.Sheets.Add(After:=wsAll)
+        wsSummary.Name = "Output_summary"
+    Else
+        wsSummary.Cells.Clear
+    End If
+    On Error GoTo 0
+
+    Dim lastRow As Long
+    lastRow = wsInput.Cells(wsInput.Rows.Count, 1).End(xlUp).Row
+
+    Dim numInputs As Long: numInputs = 29
+    Dim numOutputs As Long: numOutputs = 6
+    
+    Dim i As Long, j As Long
+    Dim results As Variant
+    
+    ' Output_all 헤더
+    wsAll.Cells(1, 1).Value = "Output"
+    For i = 1 To numInputs
+        wsAll.Cells(1, i * 4 - 2).Value = "Input_" & i
+        wsAll.Cells(1, i * 4 - 1).Value = "Beta"
+        wsAll.Cells(1, i * 4).Value = "Intercept"
+        wsAll.Cells(1, i * 4 + 1).Value = "R2"
+    Next i
+    
+    ' Output_summary 헤더
+    wsSummary.Range("A1:E1").Value = Array("Output", "Top_Input", "Beta", "Intercept", "R2")
+    
+    ' 각 Output에 대해 단순 회귀 분석
+    For j = 1 To numOutputs
+        Dim maxR2 As Double: maxR2 = -1
+        Dim bestInputIdx As Long: bestInputIdx = -1
+        Dim bestBeta As Double, bestIntercept As Double
+        
+        wsAll.Cells(j + 1, 1).Value = wsInput.Cells(1, 29 + j).Value
+        
+        For i = 1 To numInputs
+            Dim yRange As Range
+            Dim xRange As Range
+            Set yRange = wsInput.Range(wsInput.Cells(2, 29 + j), wsInput.Cells(lastRow, 29 + j))
+            Set xRange = wsInput.Range(wsInput.Cells(2, i), wsInput.Cells(lastRow, i))
+            
+            results = Application.WorksheetFunction.LinEst(yRange, xRange, True, True)
+            
+            Dim beta As Double, intercept As Double, r2 As Double
+            beta = results(1, 1)
+            intercept = results(1, 2)
+            r2 = results(3, 1)
+            
+            ' Output_all에 기록
+            wsAll.Cells(j + 1, i * 4 - 2).Value = wsInput.Cells(1, i).Value
+            wsAll.Cells(j + 1, i * 4 - 1).Value = beta
+            wsAll.Cells(j + 1, i * 4).Value = intercept
+            wsAll.Cells(j + 1, i * 4 + 1).Value = r2
+            
+            ' summary용 최대 R2 추적
+            If r2 > maxR2 Then
+                maxR2 = r2
+                bestInputIdx = i
+                bestBeta = beta
+                bestIntercept = intercept
+            End If
+        Next i
+        
+        ' Output_summary에 기록
+        wsSummary.Cells(j + 1, 1).Value = wsInput.Cells(1, 29 + j).Value
+        wsSummary.Cells(j + 1, 2).Value = wsInput.Cells(1, bestInputIdx).Value
+        wsSummary.Cells(j + 1, 3).Value = bestBeta
+        wsSummary.Cells(j + 1, 4).Value = bestIntercept
+        wsSummary.Cells(j + 1, 5).Value = maxR2
+    Next j
+
+    MsgBox "단순 회귀 분석이 완료되었습니다. Output_all 및 Output_summary 시트를 확인하세요.", vbInformation
+
+End Sub

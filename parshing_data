@@ -1,0 +1,58 @@
+import os
+import re
+import pandas as pd
+
+def parse_weekly_reports(folder_path):
+    data = []
+
+    for filename in sorted(os.listdir(folder_path)):
+        if filename.startswith("WW") and filename.endswith(".txt"):
+            week = filename.replace(".txt", "")
+            with open(os.path.join(folder_path, filename), 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+
+            if len(lines) < 3:
+                continue  # skip empty or malformed files
+
+            date = lines[0].strip()  # 1st line: 작성일
+            content_lines = lines[2:]  # 3rd line부터 본문
+
+            current_department = None
+            current_team = None
+
+            for line in content_lines:
+                line = line.strip()
+
+                # 부서 시작 (예: 1. 부서이름)
+                dept_match = re.match(r'^(\d+)\.\s*(.+)', line)
+                if dept_match:
+                    current_department = dept_match.group(2).strip()
+                    continue
+
+                # 팀 시작 (예: 1) [팀이름])
+                team_match = re.match(r'^\d+\s*(.+?)(.*)', line)
+                if team_match:
+                    current_team = team_match.group(1).strip()
+                    report = team_match.group(2).strip()
+                    if report:
+                        data.append({
+                            'Week': week,
+                            'Date': date,
+                            'Department': current_department,
+                            'Team': current_team,
+                            'Report': report
+                        })
+                    continue
+
+                # 내용 추가 줄
+                if current_department and current_team and line:
+                    data.append({
+                        'Week': week,
+                        'Date': date,
+                        'Department': current_department,
+                        'Team': current_team,
+                        'Report': line
+                    })
+
+    df = pd.DataFrame(data)
+    return df

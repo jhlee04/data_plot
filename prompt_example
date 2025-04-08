@@ -1,0 +1,38 @@
+import pandas as pd
+
+def load_prompt_template(filepath):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        return f.read()
+
+def make_summary_prompt(df, month, week, prompt_template):
+    # 대상 주간 데이터 필터링
+    df_filtered = df[df['Week'] == week]
+
+    # 부서 > 팀별 보고 정리
+    grouped = df_filtered.groupby(['Department', 'Team'])['Report'].apply(lambda x: '\n'.join(x)).reset_index()
+
+    # 전체 보고서 텍스트 구성
+    report_blocks = []
+    for _, row in grouped.iterrows():
+        report_blocks.append(f"[{row['Department']} > {row['Team']}]\n{row['Report']}")
+    report_text = '\n\n'.join(report_blocks)
+
+    # 프롬프트 생성
+    prompt = prompt_template.format(month=month, week=week, report_text=report_text)
+    return prompt
+
+
+####사용 예시 
+
+# 1. 사전 작업
+df = pd.read_csv("weekly_report_data.csv")  # 또는 위 파서 함수 결과
+prompt_template = load_prompt_template("prompt_template.txt")
+
+# 2. 특정 월/주차 대상 프롬프트 생성
+month = "03"
+week = "WW13"
+prompt_text = make_summary_prompt(df, month, week, prompt_template)
+
+# 3. 사내망 LLM에 입력용 텍스트 저장
+with open(f"LLM_input_{week}.txt", "w", encoding="utf-8") as f:
+    f.write(prompt_text)

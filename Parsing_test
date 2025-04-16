@@ -1,0 +1,67 @@
+text = '''
+OOO팀 ABC 프로젝트 WW01 2025-03-01
+
+핵심 현안
+* 공정 최적화 필요 (설비 A, 수율 저하 원인 분석)
+* 패턴 불량 발생 지속 (고객사 요청 대응 필요)
+
+기술 세부 항목
+* [FE: 인터페이스 개선 (홍길동 "TL")] 반응성 개선 및 UI 간소화 작업 예정 (w/ UX팀)
+* [BE: API 최적화 (김철수 "TL")] 데이터 처리 속도 개선
+
+차주 진행 업무
+* ...
+'''
+
+core_issues = parse_core_issues(text)
+technical_items = parse_technical_items(text)
+
+from pprint import pprint
+pprint(core_issues)
+pprint(technical_items)
+
+import re
+
+def parse_technical_items(text: str):
+    pattern = re.compile(
+        r'\s*(?P<category>[^:]+)\s*:\s*' +
+        r'(?P<title>[^(]+?)\s*' +
+        r'(?P<owner>[^)"]*"?[^)"]*"?[^)]*)\s*' +
+        r'\s*(?P<detail>.*?)(?:\s*w/\s*(?P<collab>[^)]+))?\s*$',
+        re.MULTILINE
+    )
+
+    results = []
+    for match in pattern.finditer(text):
+        results.append({
+            'category': match.group('category').strip(),
+            'title': match.group('title').strip(),
+            'owner': match.group('owner').strip().replace('"', ''),
+            'detail': match.group('detail').strip(),
+            'collab_team': match.group('collab').strip() if match.group('collab') else None
+        })
+    return results
+
+
+def parse_core_issues(text: str):
+    section_started = False
+    results = []
+
+    for line in text.split('\n'):
+        line = line.strip()
+        if line.startswith("핵심 현안"):
+            section_started = True
+            continue
+        if section_started:
+            if line.startswith("*"):
+                # 핵심 현안 항목
+                match = re.match(r'\*\s*(?P<summary>.+?)(?:(?P<detail>.+))?\s*$', line)
+                if match:
+                    results.append({
+                        'summary': match.group('summary').strip(),
+                        'detail': match.group('detail').strip() if match.group('detail') else None
+                    })
+            elif line == "" or not line.startswith("*"):
+                # 다음 섹션으로 넘어갔다고 간주
+                break
+  return results  

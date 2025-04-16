@@ -1,0 +1,42 @@
+import pandas as pd
+
+# CSV 로드
+df = pd.read_csv('core_issues_full.csv')
+
+# 요약 및 키워드 추출용 프롬프트 생성
+def make_prompt(summary_text):
+    return f"""다음은 한 주간의 핵심 현안 보고 내용입니다.
+
+{summary_text.strip()}
+
+[요청]
+1. 위 내용을 한 문장으로 요약해줘 (50자 이내)
+2. 핵심 키워드를 3~5개 추출해줘 (쉼표로 구분)
+"""
+
+# LLM 호출 시뮬레이션 (→ 실제 내부 LLM 호출 함수로 바꾸면 됨)
+def fake_llm_call(prompt):
+    # 아주 단순화한 예시 응답
+    return {
+        'short_summary': "요약 예시입니다.",
+        'keywords': "수율, 장비, 공정"
+    }
+
+# 결과 저장용 리스트
+short_summaries = []
+keywords = []
+
+# 행 순회하며 요약 및 키워드 추출
+for idx, row in df.iterrows():
+    summary_text = row['summary']
+    prompt = make_prompt(summary_text)
+    result = fake_llm_call(prompt)  # → 실제 LLM 호출로 대체
+    short_summaries.append(result['short_summary'])
+    keywords.append(result['keywords'])
+
+# 결과 컬럼 추가
+df['short_summary'] = short_summaries
+df['keywords'] = keywords
+
+# 저장
+df.to_csv('core_issues_augmented.csv', index=False, encoding='utf-8-sig')

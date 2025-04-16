@@ -22,6 +22,14 @@ def fake_llm_call(prompt):
         'keywords': "수율, 장비, 공정"
     }
 
+# 실제 내부 LLM 호출 함수 (예시)
+def real_llm_call(prompt):
+    response = 내부_LLM_API_호출(prompt)
+    return {
+        'short_summary': response['요약값'],
+        'keywords': response['키워드값']
+    }
+
 # 결과 저장용 리스트
 short_summaries = []
 keywords = []

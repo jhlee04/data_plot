@@ -1,0 +1,13 @@
+def extract_agenda_section(content_text):
+    lines = content_text.splitlines()
+    start_idx = None
+
+    for i, line in enumerate(lines):
+        if "<Agenda>" in line:
+            start_idx = i
+            break
+
+    if start_idx is not None:
+        return "\n".join(lines[start_idx:]).strip()
+    else:
+        return "[Agenda 시작 라인을 찾을 수 없습니다.]"

@@ -1,0 +1,117 @@
+import os
+import json
+import time
+import re
+import requests
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from bs4 import BeautifulSoup
+
+# ====================
+# 1. 셀레늄: ID 추출 + 쿠키 저장
+# ====================
+def get_meeting_ids_and_cookies(list_url):
+    try:
+        driver = webdriver.Chrome()
+        driver.get(list_url)
+        time.sleep(2)  # 로딩 대기
+
+        html = driver.page_source
+        meeting_ids = re.findall(r"openDetailInfo\('M0D','(\d+)'", html)
+
+        cookies = driver.get_cookies()
+        with open("cookies.json", "w", encoding="utf-8") as f:
+            json.dump(cookies, f, ensure_ascii=False, indent=2)
+
+        print(f"[INFO] 총 {len(meeting_ids)}개 회의 ID 추출 완료")
+        return meeting_ids
+    except Exception as e:
+        print(f"[ERROR] ID 추출 실패: {e}")
+        return []
+    finally:
+        driver.quit()
+
+
+# ====================
+# 2. 쿠키 불러오기
+# ====================
+def load_cookies(filepath="cookies.json"):
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            cookies = json.load(f)
+        return {c['name']: c['value'] for c in cookies}
+    except Exception as e:
+        print(f"[ERROR] 쿠키 불러오기 실패: {e}")
+        return {}
+
+
+# ====================
+# 3. 상세 페이지 파싱
+# ====================
+def parse_meeting_detail(meeting_id, base_url, cookies_dict):
+    url = f"{base_url}{meeting_id}"
+    try:
+        res = requests.get(url, cookies=cookies_dict, timeout=10, verify=False)
+        res.raise_for_status()
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        # 3-1. 아젠다-발표자 테이블 파싱
+        rows = soup.select("table.agenda-table tr")  # class명은 실제 명칭으로 수정 필요
+        agenda_items = []
+        for row in rows[1:]:  # 헤더 제외
+            cells = row.find_all(["th", "td"])
+            if len(cells) >= 2:
+                agenda = cells[0].text.strip()
+                speaker = cells[1].text.strip()
+                agenda_items.append({"agenda": agenda, "speaker": speaker})
+
+        # 3-2. 회의 내용 추출 (HTML 태그 제거 후 텍스트만)
+        content_div = soup.select_one("div.content-area")  # 실제 class명으로 수정 필요
+        content_text = content_div.get_text(separator="\n").strip() if content_div else "[내용 없음]"
+
+        return {
+            "id": meeting_id,
+            "url": url,
+            "agenda_speaker_list": agenda_items,
+            "content": content_text
+        }
+
+    except Exception as e:
+        print(f"[ERROR] 회의 상세 파싱 실패 (ID: {meeting_id}): {e}")
+        return None
+
+
+# ====================
+# 4. JSON 저장
+# ====================
+def save_json(data, folder="meeting_json"):
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, f"meeting_{data['id']}.json")
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        print(f"[INFO] 저장 완료: {path}")
+    except Exception as e:
+        print(f"[ERROR] 저장 실패 (ID: {data['id']}): {e}")
+
+
+# ====================
+# 5. 전체 실행
+# ====================
+def process_all_meetings(meeting_ids, base_url="https://intranet.company.com/meeting/detail?id="):
+    cookies = load_cookies()
+    for mid in meeting_ids:
+        data = parse_meeting_detail(mid, base_url, cookies)
+        if data:
+            save_json(data)
+
+
+# ====================
+# 6. MAIN
+# ====================
+if __name__ == "__main__":
+    list_url = "https://intranet.company.com/meeting/list"
+    base_detail_url = "https://intranet.company.com/meeting/detail?id="
+
+    ids = get_meeting_ids_and_cookies(list_url)
+    process_all_meetings(ids, base_detail_url)

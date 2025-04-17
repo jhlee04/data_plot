@@ -1,0 +1,57 @@
+
+def make_team_analysis_prompt(team_name, short_summaries, keyword_list):
+    summaries_block = '\n'.join([
+        f"- Week {i+1}: {s}" for i, s in enumerate(short_summaries)
+    ])
+    keywords = ', '.join(keyword_list)
+
+    return f"""다음은 {team_name}의 최근 주간 핵심 이슈 요약입니다.
+
+[이슈 요약]
+{summaries_block}
+
+[주요 키워드]
+{keywords}
+
+이 내용을 바탕으로 종합 분석을 작성해줘.
+- 반복된 이슈나 원인
+- 기술적/운영상의 시사점
+- 협업 필요성
+- 향후 리스크 또는 과제
+
+분석은 간결하고 명확한 문장으로 3~5문장 정도로 작성해줘.
+"""
+
+import pandas as pd
+from collections import Counter
+
+df = pd.read_csv("core_issues_final.csv")
+
+teams = df['team'].unique()
+team_analyses = []
+
+# LLM 응답 시뮬레이션
+def call_llm(prompt):
+    return "최근 수율 저하 이슈가 반복되었으며, 장비 조건 개선이 핵심 과제입니다..."
+
+for team in teams:
+    team_df = df[df['team'] == team].sort_values(by='week')
+
+    short_summaries = team_df['short_summary'].tolist()
+    
+    all_keywords = []
+    for kw in team_df['keywords']:
+        all_keywords.extend([k.strip() for k in kw.split(',')])
+    top_keywords = [kw for kw, _ in Counter(all_keywords).most_common(5)]
+
+    prompt = make_team_analysis_prompt(team, short_summaries, top_keywords)
+    analysis = call_llm(prompt)
+    
+    team_analyses.append({'team': team, 'analysis': analysis})
+
+# 결과 저장
+analysis_df = pd.DataFrame(team_analyses)
+analysis_df.to_csv("team_analysis_summary.csv", index=False, encoding='utf-8-sig')
+
+
+

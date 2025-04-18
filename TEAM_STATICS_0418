@@ -1,0 +1,68 @@
+Sub 팀별_통계_추출()
+
+    Dim wsSource As Worksheet, wsResult As Worksheet
+    Dim lastRow As Long, i As Long
+    Dim dict As Object
+    Set dict = CreateObject("Scripting.Dictionary")
+    
+    Set wsSource = ThisWorkbook.Sheets("응답 DB")
+    Set wsResult = ThisWorkbook.Sheets("결과 DB")
+    
+    lastRow = wsSource.Cells(wsSource.Rows.Count, "C").End(xlUp).Row
+    
+    ' 1. 팀별 데이터 그룹핑
+    For i = 2 To lastRow
+        Dim 부서 As String, 팀 As String, key As String
+        부서 = wsSource.Cells(i, "C").Value
+        팀 = wsSource.Cells(i, "D").Value
+        key = 부서 & "_" & 팀
+        
+        If Not dict.exists(key) Then
+            dict.Add key, CollectionInit()
+        End If
+        dict(key).Add i  '해당 row 인덱스를 저장
+    Next i
+    
+    ' 2. 결과 시트에 헤더 작성
+    wsResult.Cells.Clear
+    wsResult.Range("A1").Value = "부서"
+    wsResult.Range("B1").Value = "팀"
+    wsResult.Range("C1").Value = "답변1 평균"
+    wsResult.Range("D1").Value = "답변2 최다선택"
+    ' ... 이후 필요한 항목 계속 추가
+
+    ' 3. 팀별 통계 계산
+    Dim r As Long: r = 2
+    Dim keyVal As Variant
+    For Each keyVal In dict.Keys
+        Dim rows As Collection
+        Set rows = dict(keyVal)
+        
+        Dim sum1 As Double: sum1 = 0
+        Dim cnt As Long: cnt = 0
+        
+        ' 답변1: G열 = 열 번호 7
+        For Each idx In rows
+            If IsNumeric(wsSource.Cells(idx, 7).Value) Then
+                sum1 = sum1 + wsSource.Cells(idx, 7).Value
+                cnt = cnt + 1
+            End If
+        Next
+        
+        wsResult.Cells(r, "A").Value = Split(keyVal, "_")(0)
+        wsResult.Cells(r, "B").Value = Split(keyVal, "_")(1)
+        wsResult.Cells(r, "C").Value = Round(sum1 / cnt, 2)
+        
+        ' 답변2~15 → 0/1 기준 선택 count
+        ' 답변11: 중복 선택 → Top 3 추출
+        
+        r = r + 1
+    Next
+
+    MsgBox "팀별 통계 정리가 완료되었습니다!", vbInformation
+
+End Sub
+
+Function CollectionInit() As Collection
+    Set CollectionInit = New Collection
+End Function

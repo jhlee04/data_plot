@@ -1,28 +1,27 @@
 from selenium import webdriver
+from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from bs4 import BeautifulSoup
+from selenium.webdriver.chrome.options import Options
 import time
 
-# Chrome 드라이버 설정
-driver = webdriver.Chrome()  # 혹은 경로 지정: Chrome(executable_path="경로")
+# Chrome 실행 옵션 설정 (headless로 하고 싶으면 아래 주석 해제)
+# options = Options()
+# options.add_argument("--headless")
+
+# 드라이버 실행
+driver = webdriver.Chrome()  # 또는 Chrome(service=Service("경로"), options=options)
 
 # URL 접속
 driver.get("http://사내웹주소")
 
 # 자바스크립트 로딩 대기
-time.sleep(3)  # 혹은 WebDriverWait 사용
+time.sleep(3)  # WebDriverWait으로 대체 가능
 
-# 페이지 소스 가져오기
-html = driver.page_source
-
-# BeautifulSoup으로 파싱
-soup = BeautifulSoup(html, "html.parser")
-
-# 원하는 리스트 추출
-rows = soup.find_all("tr", class_="board_list_row")
+# 셀레늄으로 직접 요소 추출
+rows = driver.find_elements(By.CLASS_NAME, "board_list_row")
 
 for row in rows:
     print(row.text.strip())
 
-# 브라우저 종료
+# 드라이버 종료
 driver.quit()

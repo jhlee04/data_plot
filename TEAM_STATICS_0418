@@ -1,10 +1,10 @@
-Sub 분석_결과DB_최종버전()
+Sub 분석_결과DB_오류없는최종()
 
     Dim wsInfo As Worksheet, wsData As Worksheet, wsOut As Worksheet
     Set wsInfo = Worksheets("답변정보")
     Set wsData = Worksheets("응답DB")
 
-    ' 기존 결과 시트 삭제 후 새로 생성
+    ' 결과 시트 초기화
     On Error Resume Next
     Application.DisplayAlerts = False
     Worksheets("결과DB").Delete
@@ -20,22 +20,23 @@ Sub 분석_결과DB_최종버전()
 
     ' 팀별 그룹핑
     Dim teamDict As Object: Set teamDict = CreateObject("Scripting.Dictionary")
-    Dim i As Long
-    For i = 2 To lastDataRow
+    Dim rowIdx As Long
+    For rowIdx = 2 To lastDataRow
         Dim teamKey As String
-        teamKey = wsData.Cells(i, "C").Value & "||" & wsData.Cells(i, "D").Value
+        teamKey = wsData.Cells(rowIdx, "C").Value & "||" & wsData.Cells(rowIdx, "D").Value
         If Not teamDict.exists(teamKey) Then teamDict.Add teamKey, New Collection
-        teamDict(teamKey).Add i
-    Next i
+        teamDict(teamKey).Add rowIdx
+    Next rowIdx
 
     ' 문항 분류 및 그룹화
     Dim scoreCols As Collection: Set scoreCols = New Collection
     Dim choiceGroups As Object: Set choiceGroups = CreateObject("Scripting.Dictionary")
 
-    For i = 2 To lastInfoRow
+    Dim infoRow As Long
+    For infoRow = 2 To lastInfoRow
         Dim rawColName As String, qType As String
-        rawColName = wsInfo.Cells(i, "A").Value
-        qType = wsInfo.Cells(i, "C").Value
+        rawColName = wsInfo.Cells(infoRow, "A").Value
+        qType = wsInfo.Cells(infoRow, "C").Value
 
         If qType = "점수형" Then
             scoreCols.Add rawColName
@@ -51,7 +52,7 @@ Sub 분석_결과DB_최종버전()
             End If
             choiceGroups(prefixName).Add rawColName
         End If
-    Next i
+    Next infoRow
 
     ' 결과 헤더 구성
     wsOut.Cells(1, 1).Value = "부서"
@@ -64,7 +65,7 @@ Sub 분석_결과DB_최종버전()
         wsOut.Cells(1, outCol).Value = scoreCol & "_평균"
         colMap.Add scoreCol & "_평균", outCol
         outCol = outCol + 1
-    Next
+    Next scoreCol
 
     Dim groupKey As Variant
     For Each groupKey In choiceGroups.Keys
@@ -76,78 +77,79 @@ Sub 분석_결과DB_최종버전()
             wsOut.Cells(1, outCol).Value = groupKey & "_Top" & t & "_카운트"
             colMap.Add groupKey & "_Top" & t & "_카운트", outCol
             outCol = outCol + 1
-        Next
-    Next
+        Next t
+    Next groupKey
 
-    ' 실제 데이터 계산
-    Dim rowOut As Long: rowOut = 2
+    ' 결과 계산
+    Dim resultRow As Long: resultRow = 2
     Dim teamKey As Variant
     For Each teamKey In teamDict.Keys
         Dim 부서 As String: 부서 = Split(teamKey, "||")(0)
         Dim 팀 As String: 팀 = Split(teamKey, "||")(1)
-        wsOut.Cells(rowOut, 1).Value = 부서
-        wsOut.Cells(rowOut, 2).Value = 팀
+        wsOut.Cells(resultRow, 1).Value = 부서
+        wsOut.Cells(resultRow, 2).Value = 팀
 
         Dim rows As Collection: Set rows = teamDict(teamKey)
-        Dim r As Variant
 
-        ' 점수형 평균
+        ' 점수형 평균 계산
         For Each scoreCol In scoreCols
-            Dim sColIdx As Long
-            sColIdx = wsData.Rows(headerRow).Find(What:=scoreCol, LookIn:=xlValues, LookAt:=xlWhole).Column
+            Dim colIdx As Long
+            colIdx = wsData.Rows(headerRow).Find(What:=scoreCol, LookIn:=xlValues, LookAt:=xlWhole).Column
             Dim total As Double: total = 0
             Dim cnt As Long: cnt = 0
+            Dim r As Variant
             For Each r In rows
-                If IsNumeric(wsData.Cells(r, sColIdx).Value) Then
-                    total = total + wsData.Cells(r, sColIdx).Value
+                If IsNumeric(wsData.Cells(r, colIdx).Value) Then
+                    total = total + wsData.Cells(r, colIdx).Value
                     cnt = cnt + 1
                 End If
-            Next
+            Next r
             If cnt > 0 Then
-                wsOut.Cells(rowOut, colMap(scoreCol & "_평균")).Value = Round(total / cnt, 2)
+                wsOut.Cells(resultRow, colMap(scoreCol & "_평균")).Value = Round(total / cnt, 2)
             End If
-        Next
+        Next scoreCol
 
-        ' 선택형 Top 3
+        ' 선택형 Top3 계산
         For Each groupKey In choiceGroups.Keys
             Dim voteMap As Object: Set voteMap = CreateObject("Scripting.Dictionary")
             Dim choiceCol As Variant
             For Each choiceCol In choiceGroups(groupKey)
-                Dim cColIdx As Long
-                cColIdx = wsData.Rows(headerRow).Find(What:=choiceCol, LookIn:=xlValues, LookAt:=xlWhole).Column
-                Dim itemLabel As String
+                Dim colIdx As Long
+                colIdx = wsData.Rows(headerRow).Find(What:=choiceCol, LookIn:=xlValues, LookAt:=xlWhole).Column
+                Dim label As String
                 If InStr(choiceCol, "_") > 0 Then
-                    itemLabel = Mid(choiceCol, InStr(choiceCol, "_") + 1)
+                    label = Mid(choiceCol, InStr(choiceCol, "_") + 1)
                 Else
-                    itemLabel = choiceCol
+                    label = choiceCol
                 End If
                 Dim count As Long: count = 0
                 For Each r In rows
-                    If wsData.Cells(r, cColIdx).Value = 1 Then count = count + 1
-                Next
-                voteMap(itemLabel) = count
-            Next
+                    If wsData.Cells(r, colIdx).Value = 1 Then count = count + 1
+                Next r
+                voteMap(label) = count
+            Next choiceCol
 
-            ' Top 3 정렬
-            Dim keyArr As Variant: keyArr = voteMap.Keys
+            ' 정렬 후 Top 3 추출
+            Dim topKeys As Variant: topKeys = voteMap.Keys
             Dim a As Long, b As Long, tmp As Variant
             For a = 0 To voteMap.Count - 2
                 For b = a + 1 To voteMap.Count - 1
-                    If voteMap(keyArr(a)) < voteMap(keyArr(b)) Then
-                        tmp = keyArr(a)
-                        keyArr(a) = keyArr(b)
-                        keyArr(b) = tmp
+                    If voteMap(topKeys(a)) < voteMap(topKeys(b)) Then
+                        tmp = topKeys(a)
+                        topKeys(a) = topKeys(b)
+                        topKeys(b) = tmp
                     End If
-                Next
-            Next
+                Next b
+            Next a
 
+            Dim t As Long
             For t = 0 To WorksheetFunction.Min(2, voteMap.Count - 1)
-                wsOut.Cells(rowOut, colMap(groupKey & "_Top" & (t + 1))).Value = keyArr(t)
-                wsOut.Cells(rowOut, colMap(groupKey & "_Top" & (t + 1) & "_카운트")).Value = voteMap(keyArr(t))
+                wsOut.Cells(resultRow, colMap(groupKey & "_Top" & (t + 1))).Value = topKeys(t)
+                wsOut.Cells(resultRow, colMap(groupKey & "_Top" & (t + 1) & "_카운트")).Value = voteMap(topKeys(t))
             Next t
         Next groupKey
 
-        rowOut = rowOut + 1
+        resultRow = resultRow + 1
     Next teamKey
 
     MsgBox "'결과DB' 시트가 생성되었습니다!", vbInformation

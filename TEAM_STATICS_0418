@@ -1,19 +1,14 @@
-Sub 분석_자동화_결과DB()
+Sub 설문_자동_분석_결과DB()
 
     Dim wsInfo As Worksheet, wsData As Worksheet, wsOut As Worksheet
     Dim lastRowInfo As Long, lastRowData As Long
-    Dim dictTeam As Object: Set dictTeam = CreateObject("Scripting.Dictionary")
-    Dim teamKey As String
-    Dim i As Long, j As Long, colIdx As Long
-    Dim colName As String, colType As String, selLimit As String
     Dim headerRow As Long: headerRow = 1
-    Dim deptCol As String: deptCol = "C" ' 부서열
-    Dim teamCol As String: teamCol = "D" ' 팀열
+    Dim deptCol As String: deptCol = "C"
+    Dim teamCol As String: teamCol = "D"
 
-    ' 시트 참조
-    Set wsInfo = ThisWorkbook.Sheets("답변정보")
-    Set wsData = ThisWorkbook.Sheets("응답DB")
-
+    Set wsInfo = Worksheets("답변정보")
+    Set wsData = Worksheets("응답DB")
+    
     ' 결과DB 시트 초기화
     On Error Resume Next
     Application.DisplayAlerts = False
@@ -22,97 +17,125 @@ Sub 분석_자동화_결과DB()
     On Error GoTo 0
     Set wsOut = Worksheets.Add
     wsOut.Name = "결과DB"
-
-    ' 결과 시트 헤더
-    wsOut.Cells(1, 1).Value = "부서"
-    wsOut.Cells(1, 2).Value = "팀"
-    Dim outRow As Long: outRow = 2
-
-    ' 팀별 row 수집
-    lastRowData = wsData.Cells(wsData.Rows.Count, deptCol).End(xlUp).Row
-    For i = headerRow + 1 To lastRowData
-        teamKey = wsData.Cells(i, deptCol).Value & "||" & wsData.Cells(i, teamCol).Value
-        If Not dictTeam.exists(teamKey) Then
-            dictTeam.Add teamKey, New Collection
+    
+    ' 문항 그룹화 (Q2, Q3 등으로 묶음)
+    Dim groupMap As Object: Set groupMap = CreateObject("Scripting.Dictionary")
+    Dim colTypeMap As Object: Set colTypeMap = CreateObject("Scripting.Dictionary")
+    
+    lastRowInfo = wsInfo.Cells(wsInfo.Rows.Count, "A").End(xlUp).Row
+    Dim i As Long
+    For i = 2 To lastRowInfo
+        Dim colID As String, colType As String
+        colID = wsInfo.Cells(i, "A").Value
+        colType = wsInfo.Cells(i, "C").Value
+        
+        Dim qName As String
+        If InStr(colID, "_") > 0 Then
+            qName = Split(colID, "_")(0)
+        Else
+            qName = colID
         End If
-        dictTeam(teamKey).Add i
+        
+        If Not groupMap.exists(qName) Then
+            groupMap.Add qName, New Collection
+            colTypeMap.Add qName, colType
+        End If
+        groupMap(qName).Add colID
     Next i
 
-    ' 답변정보 루프
-    lastRowInfo = wsInfo.Cells(wsInfo.Rows.Count, "A").End(xlUp).Row
+    ' 팀 리스트 수집
+    Dim teamDict As Object: Set teamDict = CreateObject("Scripting.Dictionary")
+    lastRowData = wsData.Cells(wsData.Rows.Count, deptCol).End(xlUp).Row
+    
+    For i = 2 To lastRowData
+        Dim key As String
+        key = wsData.Cells(i, deptCol).Value & "||" & wsData.Cells(i, teamCol).Value
+        If Not teamDict.exists(key) Then teamDict.Add key, New Collection
+        teamDict(key).Add i
+    Next i
 
-    Dim outCol As Long: outCol = 3
+    ' 결과 헤더
+    wsOut.Cells(1, 1).Value = "부서"
+    wsOut.Cells(1, 2).Value = "팀"
+    
+    Dim outRow As Long: outRow = 2
+    Dim qKey As Variant, outCol As Long: outCol = 3
+    
+    ' 문항별 처리
+    For Each qKey In groupMap.Keys
+        Dim cols As Collection: Set cols = groupMap(qKey)
+        Dim qType As String: qType = colTypeMap(qKey)
+        
+        ' 전체 응답DB에서 열 인덱스 수집
+        Dim colIndexes() As Long
+        ReDim colIndexes(0 To cols.Count - 1)
+        For i = 1 To cols.Count
+            colIndexes(i - 1) = wsData.Rows(headerRow).Find(cols(i), , xlValues, xlWhole).Column
+        Next i
 
-    For i = 2 To lastRowInfo
-        colName = wsInfo.Cells(i, "A").Value
-        colType = wsInfo.Cells(i, "C").Value
-        selLimit = wsInfo.Cells(i, "D").Value
-        colIdx = wsData.Rows(headerRow).Find(What:=colName, LookIn:=xlValues, LookAt:=xlWhole).Column
-
-        ' 팀별로 처리
-        For Each teamKey In dictTeam.Keys
-            Dim 부서 As String, 팀 As String
-            부서 = Split(teamKey, "||")(0)
-            팀 = Split(teamKey, "||")(1)
-
-            ' 팀별 row
-            Dim rows As Collection: Set rows = dictTeam(teamKey)
-
-            ' 점수형 평균
-            If colType = "점수형" Then
+        ' 팀별 처리
+        Dim tKey As Variant, r As Variant
+        outRow = 2
+        For Each tKey In teamDict.Keys
+            Dim 부서 As String: 부서 = Split(tKey, "||")(0)
+            Dim 팀 As String: 팀 = Split(tKey, "||")(1)
+            Dim rows As Collection: Set rows = teamDict(tKey)
+            
+            If outCol = 3 Then
+                wsOut.Cells(outRow, 1).Value = 부서
+                wsOut.Cells(outRow, 2).Value = 팀
+            End If
+            
+            If qType = "점수형" Then
                 Dim total As Double: total = 0
-                Dim cnt As Long: cnt = 0
+                Dim count As Long: count = 0
                 For Each r In rows
-                    If IsNumeric(wsData.Cells(r, colIdx).Value) Then
-                        total = total + wsData.Cells(r, colIdx).Value
-                        cnt = cnt + 1
-                    End If
-                Next
-                If i = 2 Then
-                    wsOut.Cells(outRow, 1).Value = 부서
-                    wsOut.Cells(outRow, 2).Value = 팀
-                End If
-                wsOut.Cells(outRow, outCol).Value = IIf(cnt > 0, Round(total / cnt, 2), "")
-                wsOut.Cells(1, outCol).Value = colName & "_평균"
+                    For i = 0 To UBound(colIndexes)
+                        If IsNumeric(wsData.Cells(r, colIndexes(i)).Value) Then
+                            total = total + wsData.Cells(r, colIndexes(i)).Value
+                            count = count + 1
+                        End If
+                    Next i
+                Next r
+                wsOut.Cells(outRow, outCol).Value = IIf(count > 0, Round(total / count, 2), "")
+                wsOut.Cells(1, outCol).Value = qKey & "_평균"
                 outCol = outCol + 1
 
-            ' 선택형: 득표수 상위 3개
-            ElseIf colType = "선택형" Then
-                Dim dictCount As Object: Set dictCount = CreateObject("Scripting.Dictionary")
+            ElseIf qType = "선택형" Then
+                Dim voteDict As Object: Set voteDict = CreateObject("Scripting.Dictionary")
+                ' 항목별 1 count
                 For Each r In rows
-                    If wsData.Cells(r, colIdx).Value = 1 Then
-                        If Not dictCount.exists(colName) Then dictCount.Add colName, 0
-                        dictCount(colName) = dictCount(colName) + 1
-                    End If
-                Next
-
-                ' Top 3 정렬
-                Dim keyArr, tmp, a, b
-                keyArr = dictCount.Keys
-                For a = 0 To dictCount.Count - 2
-                    For b = a + 1 To dictCount.Count - 1
-                        If dictCount(keyArr(a)) < dictCount(keyArr(b)) Then
-                            tmp = keyArr(a): keyArr(a) = keyArr(b): keyArr(b) = tmp
+                    For i = 0 To UBound(colIndexes)
+                        If wsData.Cells(r, colIndexes(i)).Value = 1 Then
+                            Dim label As String
+                            label = wsData.Cells(1, colIndexes(i)).Value
+                            If Not voteDict.exists(label) Then voteDict.Add label, 0
+                            voteDict(label) = voteDict(label) + 1
                         End If
-                    Next
-                Next
+                    Next i
+                Next r
 
-                ' 상위 3개 출력
-                Dim k As Long
-                For k = 0 To Application.Min(2, dictCount.Count - 1)
-                    If i = 2 Then
-                        wsOut.Cells(outRow, 1).Value = 부서
-                        wsOut.Cells(outRow, 2).Value = 팀
-                    End If
-                    wsOut.Cells(outRow, outCol).Value = keyArr(k) & "(" & dictCount(keyArr(k)) & ")"
-                    wsOut.Cells(1, outCol).Value = colName & "_Top" & (k + 1)
+                ' Top 3
+                Dim keys(), temp, a, b
+                keys = voteDict.Keys
+                For a = 0 To voteDict.Count - 2
+                    For b = a + 1 To voteDict.Count - 1
+                        If voteDict(keys(a)) < voteDict(keys(b)) Then
+                            temp = keys(a): keys(a) = keys(b): keys(b) = temp
+                        End If
+                    Next b
+                Next a
+
+                For i = 0 To Application.Min(2, voteDict.Count - 1)
+                    wsOut.Cells(outRow, outCol).Value = keys(i) & "(" & voteDict(keys(i)) & ")"
+                    wsOut.Cells(1, outCol).Value = qKey & "_Top" & (i + 1)
                     outCol = outCol + 1
-                Next
+                Next i
             End If
-        Next
-        outRow = outRow + 1
+            outRow = outRow + 1
+        Next tKey
         outCol = 3
-    Next
-
-    MsgBox "‘결과DB’ 시트에 분석 결과가 저장되었습니다!", vbInformation
+    Next qKey
+    
+    MsgBox "'결과DB'에 분석 결과가 저장되었습니다!", vbInformation
 End Sub

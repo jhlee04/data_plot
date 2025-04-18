@@ -1,68 +1,118 @@
-Sub 팀별_통계_추출()
+Sub 분석_자동화_결과DB()
 
-    Dim wsSource As Worksheet, wsResult As Worksheet
-    Dim lastRow As Long, i As Long
-    Dim dict As Object
-    Set dict = CreateObject("Scripting.Dictionary")
-    
-    Set wsSource = ThisWorkbook.Sheets("응답 DB")
-    Set wsResult = ThisWorkbook.Sheets("결과 DB")
-    
-    lastRow = wsSource.Cells(wsSource.Rows.Count, "C").End(xlUp).Row
-    
-    ' 1. 팀별 데이터 그룹핑
-    For i = 2 To lastRow
-        Dim 부서 As String, 팀 As String, key As String
-        부서 = wsSource.Cells(i, "C").Value
-        팀 = wsSource.Cells(i, "D").Value
-        key = 부서 & "_" & 팀
-        
-        If Not dict.exists(key) Then
-            dict.Add key, CollectionInit()
+    Dim wsInfo As Worksheet, wsData As Worksheet, wsOut As Worksheet
+    Dim lastRowInfo As Long, lastRowData As Long
+    Dim dictTeam As Object: Set dictTeam = CreateObject("Scripting.Dictionary")
+    Dim teamKey As String
+    Dim i As Long, j As Long, colIdx As Long
+    Dim colName As String, colType As String, selLimit As String
+    Dim headerRow As Long: headerRow = 1
+    Dim deptCol As String: deptCol = "C" ' 부서열
+    Dim teamCol As String: teamCol = "D" ' 팀열
+
+    ' 시트 참조
+    Set wsInfo = ThisWorkbook.Sheets("답변정보")
+    Set wsData = ThisWorkbook.Sheets("응답DB")
+
+    ' 결과DB 시트 초기화
+    On Error Resume Next
+    Application.DisplayAlerts = False
+    Worksheets("결과DB").Delete
+    Application.DisplayAlerts = True
+    On Error GoTo 0
+    Set wsOut = Worksheets.Add
+    wsOut.Name = "결과DB"
+
+    ' 결과 시트 헤더
+    wsOut.Cells(1, 1).Value = "부서"
+    wsOut.Cells(1, 2).Value = "팀"
+    Dim outRow As Long: outRow = 2
+
+    ' 팀별 row 수집
+    lastRowData = wsData.Cells(wsData.Rows.Count, deptCol).End(xlUp).Row
+    For i = headerRow + 1 To lastRowData
+        teamKey = wsData.Cells(i, deptCol).Value & "||" & wsData.Cells(i, teamCol).Value
+        If Not dictTeam.exists(teamKey) Then
+            dictTeam.Add teamKey, New Collection
         End If
-        dict(key).Add i  '해당 row 인덱스를 저장
+        dictTeam(teamKey).Add i
     Next i
-    
-    ' 2. 결과 시트에 헤더 작성
-    wsResult.Cells.Clear
-    wsResult.Range("A1").Value = "부서"
-    wsResult.Range("B1").Value = "팀"
-    wsResult.Range("C1").Value = "답변1 평균"
-    wsResult.Range("D1").Value = "답변2 최다선택"
-    ' ... 이후 필요한 항목 계속 추가
 
-    ' 3. 팀별 통계 계산
-    Dim r As Long: r = 2
-    Dim keyVal As Variant
-    For Each keyVal In dict.Keys
-        Dim rows As Collection
-        Set rows = dict(keyVal)
-        
-        Dim sum1 As Double: sum1 = 0
-        Dim cnt As Long: cnt = 0
-        
-        ' 답변1: G열 = 열 번호 7
-        For Each idx In rows
-            If IsNumeric(wsSource.Cells(idx, 7).Value) Then
-                sum1 = sum1 + wsSource.Cells(idx, 7).Value
-                cnt = cnt + 1
+    ' 답변정보 루프
+    lastRowInfo = wsInfo.Cells(wsInfo.Rows.Count, "A").End(xlUp).Row
+
+    Dim outCol As Long: outCol = 3
+
+    For i = 2 To lastRowInfo
+        colName = wsInfo.Cells(i, "A").Value
+        colType = wsInfo.Cells(i, "C").Value
+        selLimit = wsInfo.Cells(i, "D").Value
+        colIdx = wsData.Rows(headerRow).Find(What:=colName, LookIn:=xlValues, LookAt:=xlWhole).Column
+
+        ' 팀별로 처리
+        For Each teamKey In dictTeam.Keys
+            Dim 부서 As String, 팀 As String
+            부서 = Split(teamKey, "||")(0)
+            팀 = Split(teamKey, "||")(1)
+
+            ' 팀별 row
+            Dim rows As Collection: Set rows = dictTeam(teamKey)
+
+            ' 점수형 평균
+            If colType = "점수형" Then
+                Dim total As Double: total = 0
+                Dim cnt As Long: cnt = 0
+                For Each r In rows
+                    If IsNumeric(wsData.Cells(r, colIdx).Value) Then
+                        total = total + wsData.Cells(r, colIdx).Value
+                        cnt = cnt + 1
+                    End If
+                Next
+                If i = 2 Then
+                    wsOut.Cells(outRow, 1).Value = 부서
+                    wsOut.Cells(outRow, 2).Value = 팀
+                End If
+                wsOut.Cells(outRow, outCol).Value = IIf(cnt > 0, Round(total / cnt, 2), "")
+                wsOut.Cells(1, outCol).Value = colName & "_평균"
+                outCol = outCol + 1
+
+            ' 선택형: 득표수 상위 3개
+            ElseIf colType = "선택형" Then
+                Dim dictCount As Object: Set dictCount = CreateObject("Scripting.Dictionary")
+                For Each r In rows
+                    If wsData.Cells(r, colIdx).Value = 1 Then
+                        If Not dictCount.exists(colName) Then dictCount.Add colName, 0
+                        dictCount(colName) = dictCount(colName) + 1
+                    End If
+                Next
+
+                ' Top 3 정렬
+                Dim keyArr, tmp, a, b
+                keyArr = dictCount.Keys
+                For a = 0 To dictCount.Count - 2
+                    For b = a + 1 To dictCount.Count - 1
+                        If dictCount(keyArr(a)) < dictCount(keyArr(b)) Then
+                            tmp = keyArr(a): keyArr(a) = keyArr(b): keyArr(b) = tmp
+                        End If
+                    Next
+                Next
+
+                ' 상위 3개 출력
+                Dim k As Long
+                For k = 0 To Application.Min(2, dictCount.Count - 1)
+                    If i = 2 Then
+                        wsOut.Cells(outRow, 1).Value = 부서
+                        wsOut.Cells(outRow, 2).Value = 팀
+                    End If
+                    wsOut.Cells(outRow, outCol).Value = keyArr(k) & "(" & dictCount(keyArr(k)) & ")"
+                    wsOut.Cells(1, outCol).Value = colName & "_Top" & (k + 1)
+                    outCol = outCol + 1
+                Next
             End If
         Next
-        
-        wsResult.Cells(r, "A").Value = Split(keyVal, "_")(0)
-        wsResult.Cells(r, "B").Value = Split(keyVal, "_")(1)
-        wsResult.Cells(r, "C").Value = Round(sum1 / cnt, 2)
-        
-        ' 답변2~15 → 0/1 기준 선택 count
-        ' 답변11: 중복 선택 → Top 3 추출
-        
-        r = r + 1
+        outRow = outRow + 1
+        outCol = 3
     Next
 
-    MsgBox "팀별 통계 정리가 완료되었습니다!", vbInformation
-
+    MsgBox "‘결과DB’ 시트에 분석 결과가 저장되었습니다!", vbInformation
 End Sub
-
-Function CollectionInit() As Collection
-    Set CollectionInit = New Collection
-End Function

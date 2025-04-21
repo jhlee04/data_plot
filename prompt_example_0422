@@ -1,0 +1,22 @@
+다음 문장 패턴에서 정규식을 추출하고 싶습니다. 문장 구조는 다음과 같습니다:
+
+[과제] 신규 인력 OJT 표준화 방안 (홍길동) → 진행 중, 5월 중 1차 파일럿 예정  
+[과제] DRAM 측정 자동화 도구 기획 (이수민) → 완료, 내부 공유 완료
+
+이 문장들에서 추출하고 싶은 항목은 다음과 같습니다:
+- title: 과제명 (예: 신규 인력 OJT 표준화 방안)
+- owner: 담당자명 (예: 홍길동)
+- status: 과제 상태 (예: 진행 중, 완료)
+- detail: 그 외 설명 또는 계획 내용
+
+Python 정규식 형태로 작성해 주세요. 각 항목은 named group으로 표현해 주세요.
+
+
+import re
+
+pattern = re.compile(r"^\[과제\]\s*(?P<title>.+?)\s*\((?P<owner>.+?)\)\s*→\s*(?P<status>완료|진행 중|지연|보류)[,]?\s*(?P<detail>.*)?$")
+text = "[과제] 신규 인력 OJT 표준화 방안 (홍길동) → 진행 중, 5월 중 1차 파일럿 예정"
+
+match = pattern.match(text)
+if match:
+    print(match.groupdict())

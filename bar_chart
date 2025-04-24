@@ -4,37 +4,32 @@ import matplotlib.gridspec as gridspec
 
 # 예시 데이터
 data = {
-    '질문1': [75, 50, 100, 100, 50, 75, 25, 0, 50, 75],
-    '질문2': [100, 75, 75, 50, 25, 25, 0, 0, 100, 50],
-    '질문3': [50, 25, 0, 25, 50, 75, 100, 100, 75, 50]
+    '공정성': [75, 50, 100, 100, 50, 75, 25, 0, 50, 75],
+    '협업': [100, 75, 75, 50, 25, 25, 0, 0, 100, 50],
+    '성장지원': [50, 25, 0, 25, 50, 75, 100, 100, 75, 50]
 }
 df = pd.DataFrame(data)
 
 # 점수 및 색상 정의
 scores = [0, 25, 50, 75, 100]
 colors = {
-    0: '#4D4D4D',     # 진한 회색
+    0: '#4D4D4D',     # 진한 회색 (극단: 공감하지 않음)
     25: '#B0B0B0',    # 밝은 회색
     50: '#D9D9D9',    # 더 밝은 회색
     75: '#FDAE6B',    # 밝은 오렌지
-    100: '#F16913'    # 진한 오렌지
+    100: '#F16913'    # 진한 오렌지 (극단: 공감함)
 }
 
-# 시각화용 함수
+# 시각화용 분포 계산
 def calculate_distribution(df, question):
     counts = df[question].value_counts()
     percent = counts / counts.sum() * 100
-    # 누락 점수 채우기
-    dist = {
-        score: {
-            "count": counts.get(score, 0),
-            "percent": percent.get(score, 0)
-        }
+    return {
+        score: {"count": counts.get(score, 0), "percent": percent.get(score, 0)}
         for score in scores
     }
-    return dist
 
-# 시각화 시작
+# 시각화
 fig = plt.figure(figsize=(10, 6))
 gs = gridspec.GridSpec(3, 1, height_ratios=[1, 1, 1], hspace=0.5)
 
@@ -44,31 +39,46 @@ for i, question in enumerate(df.columns):
 
     left = 0
     total = sum([dist[score]["count"] for score in scores])
+
     for score in scores:
         val = dist[score]["percent"]
         count = dist[score]["count"]
-        ax.barh(0, val, left=left, height=0.6, color=colors[score])
 
-        # 내부 텍스트: 50, 75, 100점만 표시
+        # 바 그리기
+        bar = ax.barh(0, val, left=left, height=0.6, color=colors[score])
+
+        # 50/75/100 점수 텍스트 표시
         if score in [50, 75, 100] and val > 3:
-            ax.text(left + val / 2, 0, f'{val:.1f}% ({count}명)', va='center',
-                    ha='center', color='white', fontsize=9, fontweight='bold')
+            ax.text(left + val / 2, 0, f'{val:.1f}% ({count}명)',
+                    va='center', ha='center', color='white', fontsize=9, fontweight='bold')
+
+        # 긍정 응답률은 100점 바 중앙에 표시
+        if score == 100 and val > 3:
+            positive = dist[75]["percent"] + dist[100]["percent"]
+            ax.text(left + val / 2, 0.35, f'긍정 응답율: {positive:.1f}%',
+                    ha='center', va='center', color='white', fontsize=10, fontweight='bold')
 
         left += val
 
-    # 긍정 응답률 (75 + 100점)
-    pos_percent = dist[75]["percent"] + dist[100]["percent"]
-    ax.text(102, 0, f'긍정 응답율: {pos_percent:.1f}%', va='center',
-            fontsize=10, fontweight='bold', color='black')
+    # 항목명은 좌측에 따로 표시
+    ax.text(-10, 0, question, ha='right', va='center', fontsize=11, fontweight='bold')
 
-    # 기본 레이아웃 설정
+    # 축 설정
     ax.set_xlim(0, 100)
-    ax.set_ylim(-0.5, 0.5)
+    ax.set_ylim(-0.6, 0.6)
     ax.set_yticks([])
-    ax.set_xticks([0, 100])
-    ax.set_xticklabels(['매우 공감하지 않는다', '매우 공감한다'], fontweight='bold')
-    ax.set_title(f"{question} 점수 분포", fontsize=12, loc='left')
 
+    # 가장 하단 그래프에만 양극단 라벨 추가
+    if i == 2:
+        ax.set_xticks([0, 100])
+        ax.set_xticklabels(['공감하지 않는다', '공감한다'], fontweight='bold')
+        ax.tick_params(axis='x', labelsize=10)
+        ax.get_xticklabels()[0].set_color(colors[0])     # 회색
+        ax.get_xticklabels()[1].set_color(colors[100])   # 오렌지
+    else:
+        ax.set_xticks([])
+    
+    # 불필요한 축 제거
     for spine in ['top', 'right', 'left', 'bottom']:
         ax.spines[spine].set_visible(False)
 

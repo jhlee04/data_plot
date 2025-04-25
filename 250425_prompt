@@ -1,0 +1,40 @@
+Please write a Python script that performs the following:
+
+1. Reads all `.txt` files in a given folder.
+2. Each file contains meeting notes written in the following structure:
+   - A task starts with a line like: "1. 기능 최적화 과제 발의 (김철수)"
+   - Lines starting with "-" are details.
+   - Lines starting with ">" are action items.
+
+3. For each task in each file, extract the following fields:
+   - File Name
+   - Task Title (text before parentheses)
+   - Person in Charge (text inside parentheses)
+   - Detail Lines (join all lines starting with "-")
+   - Action Items (join all lines starting with ">", may be empty)
+
+4. Save the result as a pandas DataFrame with the following columns:
+   - 파일명, 과제명, 담당자, 세부사항, 액션아이템
+
+5. Use only standard libraries and pandas (e.g., os, re, pandas).
+6. Include a printout of the DataFrame at the end. The column names and content should remain in Korean, as shown below.
+
+Example input (inside a .txt file):
+
+1. 기능 최적화 과제 발의 (김철수)
+- 과제 세부 내용은 이러함 예시임 
+- 앞으로 일정은 이러함 세부 예시임 
+> 여기는 액션 아이템임 
+
+2. 기능 고도화 과제 발의 (최미미)
+- 과제 세부 내용은 이러함 예시임 
+- 앞으로 일정은 이러함 세부 예시임 
+
+Expected output DataFrame (columns and contents in Korean):
+
+| 파일명       | 과제명                 | 담당자 | 세부사항                                      | 액션아이템             |
+|--------------|------------------------|--------|-----------------------------------------------|------------------------|
+| 예시파일.txt | 기능 최적화 과제 발의 | 김철수 | 과제 세부 내용은 이러함 예시임\n앞으로 일정은 이러함 세부 예시임 | 여기는 액션 아이템임     |
+| 예시파일.txt | 기능 고도화 과제 발의 | 최미미 | 과제 세부 내용은 이러함 예시임\n앞으로 일정은 이러함 세부 예시임 |                        |
+
+Please make sure the code is simple and runs well on a small LLM environment.

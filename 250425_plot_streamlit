@@ -1,0 +1,89 @@
+import pandas as pd
+import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# 한글 폰트 설정
+plt.rcParams["font.family"] = "Malgun Gothic"
+sns.set_palette("pastel")
+
+# CSV 불러오기
+df = pd.read_csv("data.csv", encoding="utf-8")
+
+# 실적 기호를 숫자로 변환
+progress_map = {"○": 100, "△": 50, "×": 0}
+df["진행률"] = df["월별실적"].map(progress_map)
+
+# 월 필터
+months = sorted(df["월"].unique())
+selected_month = st.sidebar.selectbox("월 선택", months)
+filtered_df = df[df["월"] == selected_month]
+
+# --------------------------
+# 상단 영역: 도넛 + 미달성 과제 수
+# --------------------------
+st.title(f"과제 수행 현황 대시보드 - {selected_month} 기준")
+
+col1, col2 = st.columns([2, 1])
+
+with col1:
+    # 구분별 평균 진행률 계산
+    division_avg = (
+        filtered_df.groupby("구분")["진행률"]
+        .mean()
+        .reset_index()
+        .sort_values(by="진행률", ascending=False)
+    )
+
+    # 도넛형 그래프 그리기
+    fig, ax = plt.subplots(figsize=(4, 4))
+    ax.pie(
+        division_avg["진행률"],
+        labels=division_avg["구분"],
+        startangle=90,
+        wedgeprops=dict(width=0.3),
+        autopct="%.1f%%"
+    )
+    ax.set_title("구분별 평균 진행률")
+    st.pyplot(fig)
+
+with col2:
+    incomplete_count = (
+        filtered_df[filtered_df["진행률"] < 100]
+        .groupby("구분")["과제명"]
+        .count()
+        .sum()
+    )
+    st.markdown("### 전체 미달성 과제 수")
+    st.markdown(f"<h1 style='color:red; text-align:center'>{incomplete_count}건</h1>", unsafe_allow_html=True)
+
+# --------------------------
+# 중단 영역: 부서별 진행률 요약
+# --------------------------
+st.markdown("---")
+st.subheader("부서별 평균 진행률 요약")
+
+dept_avg = (
+    filtered_df.groupby("부서")["진행률"]
+    .mean()
+    .reset_index()
+    .sort_values(by="진행률", ascending=False)
+)
+
+# 수평 막대 그래프
+fig2, ax2 = plt.subplots(figsize=(6, 4))
+sns.barplot(data=dept_avg, x="진행률", y="부서", ax=ax2)
+ax2.set_xlim(0, 100)
+st.pyplot(fig2)
+
+# --------------------------
+# 하단 영역: 미달성 과제 리스트
+# --------------------------
+st.markdown("---")
+st.subheader("미달성 과제 상세 리스트")
+
+incomplete_tasks = filtered_df[filtered_df["진행률"] < 100][
+    ["구분", "부서", "과제명", "담당자", "월별목표", "월별실적", "월별결과", "코멘트"]
+]
+
+st.dataframe(incomplete_tasks, use_container_width=True)

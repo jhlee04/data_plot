@@ -1,0 +1,75 @@
+Please help me update the regular expression part of the following Python code.
+
+The code processes `.txt` files in a folder that contain meeting notes.  
+Each file includes multiple tasks, and the current code extracts the following fields:
+- File Name
+- Task Title (before parentheses)
+- Person in Charge (inside parentheses)
+- Detail lines (starting with "-")
+- Action items (starting with ">")
+
+Below is a simplified structure of each task:
+
+Example:
+1. 기능 최적화 과제 발의 (김철수)
+- 과제 세부 내용은 이러함 예시임 
+- 앞으로 일정은 이러함 세부 예시임 
+> 여기는 액션 아이템임 
+
+2. 기능 고도화 과제 발의 (최미미)
+- 과제 세부 내용은 이러함 예시임 
+- 앞으로 일정은 이러함 세부 예시임 
+
+Problem:
+The current regular expression used in the code for extracting the task title and person in charge does not work for all files.
+Please check the `title_match = re.match(...)` part in the code and update the regex so it works for this structure.
+
+Here is the code that needs to be updated:
+
+```python
+import os
+import re
+import pandas as pd
+
+def extract_tasks_from_file(filepath):
+    with open(filepath, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    filename = os.path.basename(filepath)
+    results = []
+
+    current_task = {}
+    details = []
+    actions = []
+
+    for line in lines:
+        line = line.strip()
+
+        # This is the part that needs to be updated
+        title_match = re.match(r"^\d+\.\s*(.+?)\s*$begin:math:text$(.+?)$end:math:text$", line)
+
+        if title_match:
+            if current_task:
+                current_task["세부사항"] = "\n".join(details).strip()
+                current_task["액션아이템"] = "\n".join(actions).strip()
+                results.append(current_task)
+
+            current_task = {
+                "파일명": filename,
+                "과제명": title_match.group(1).strip(),
+                "담당자": title_match.group(2).strip()
+            }
+            details = []
+            actions = []
+
+        elif line.startswith("-"):
+            details.append(line[1:].strip())
+        elif line.startswith(">"):
+            actions.append(line[1:].strip())
+
+    if current_task:
+        current_task["세부사항"] = "\n".join(details).strip()
+        current_task["액션아이템"] = "\n".join(actions).strip()
+        results.append(current_task)
+
+    return results

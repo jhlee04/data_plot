@@ -132,3 +132,38 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+#===========
+def main():
+    driver = load_cookies("cookies.pkl")
+    extracted_texts = []  # 파싱 결과 대신 텍스트만 저장
+
+    org_urls = [
+        "https://site.com/org1/list",
+        "https://site.com/org2/list",
+        "https://site.com/org3/list"
+    ]
+    
+    for list_url in org_urls:
+        links = get_meeting_links(list_url, driver)
+        
+        for detail_url in links:
+            html = fetch_meeting_html(detail_url, driver)
+            text = extract_meeting_text(html)
+            text = normalize_text(text)
+
+            extracted_texts.append({
+                "url": detail_url,    # 어느 URL에서 가져온건지
+                "text": text          # 정리된 텍스트 본문
+            })
+    
+    df = pd.DataFrame(extracted_texts)
+    df.to_csv("extracted_texts.csv", index=False, encoding="utf-8-sig")
+    driver.quit()
+
+if __name__ == "__main__":
+    main()

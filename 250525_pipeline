@@ -1,0 +1,134 @@
+# ===============================================================
+# 회의록 크롤링 + 파싱 + 저장 자동화 파이프라인
+# (1) 쿠키로 로그인 세션 유지
+# (2) 리스트 페이지에서 회의록 링크 수집 (Selenium)
+# (3) 상세 페이지 HTML 수집
+# (4) 본문 텍스트 추출 (BeautifulSoup)
+# (5) 텍스트 정리 및 정규식으로 정보 분리
+# (6) DataFrame 변환 후 CSV 저장
+# ===============================================================
+
+import pickle
+import time
+import re
+import pandas as pd
+
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from bs4 import BeautifulSoup
+
+# --- 1. 쿠키 불러오기 ---
+def load_cookies(cookie_path):
+    driver = webdriver.Chrome()
+    driver.get("https://site.com")  # 쿠키 적용할 기본 URL (도메인 맞춰 수정)
+
+    with open(cookie_path, "rb") as f:
+        cookies = pickle.load(f)
+    
+    for cookie in cookies:
+        driver.add_cookie(cookie)
+
+    driver.refresh()
+    return driver
+
+# --- 2. 리스트 페이지에서 회의록 링크 수집 ---
+def get_meeting_links(list_page_url, driver):
+    driver.get(list_page_url)
+
+    # 명시적 대기: 요소 로딩 기다리기
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_all_elements_located((By.CSS_SELECTOR, "a.meeting-link-class"))  # 실제 CSS 선택자 맞게 수정
+    )
+
+    links = []
+    meeting_elements = driver.find_elements(By.CSS_SELECTOR, "a.meeting-link-class")
+
+    for elem in meeting_elements:
+        href = elem.get_attribute("href")
+        if href:
+            links.append(href)
+
+    return links
+
+# --- 3. 상세 페이지 HTML 가져오기 ---
+def fetch_meeting_html(detail_url, driver):
+    driver.get(detail_url)
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "meeting-content"))  # 본문 영역 class명 수정
+    )
+    return driver.page_source
+
+# --- 4. 본문 텍스트 추출 ---
+def extract_meeting_text(html):
+    soup = BeautifulSoup(html, "html.parser")
+    text_element = soup.find("div", class_="meeting-content")  # 실제 class/id 이름에 맞게 수정
+    return text_element.get_text(strip=True) if text_element else ""
+
+# --- 5. 텍스트 정리 ---
+def normalize_text(text):
+    text = text.replace("\r", "\n")
+    text = re.sub(r"\n+", "\n", text)  # 줄바꿈 연속 제거
+    return text.strip()
+
+# --- 6. 회의 정보 파싱 (정규식) ---
+def parse_meeting_info(text):
+    meeting_info = {
+        "date": None,
+        "agenda": None,
+        "owner": None,
+        "contents": None,
+        "action_items": None
+    }
+
+    date_match = re.search(r"(\d{4}\.\d{2}\.\d{2})", text)
+    agenda_match = re.search(r"아젠다[:\-](.+)", text)
+    owner_match = re.search(r"담당자[:\-](.+)", text)
+    contents_match = re.search(r"회의 내용[:\-](.+?)(실행 내용[:\-]|$)", text, re.DOTALL)
+    action_match = re.search(r"실행 내용[:\-](.+)", text, re.DOTALL)
+
+    if date_match:
+        meeting_info["date"] = date_match.group(1).strip()
+    if agenda_match:
+        meeting_info["agenda"] = agenda_match.group(1).strip()
+    if owner_match:
+        meeting_info["owner"] = owner_match.group(1).strip()
+    if contents_match:
+        meeting_info["contents"] = contents_match.group(1).strip()
+    if action_match:
+        meeting_info["action_items"] = action_match.group(1).strip()
+
+    return meeting_info
+
+# --- 7. CSV로 저장 ---
+def save_to_csv(parsed_list, filename):
+    df = pd.DataFrame(parsed_list)
+    df.to_csv(filename, index=False, encoding="utf-8-sig")
+
+# --- 8. 메인 흐름 ---
+def main():
+    driver = load_cookies("cookies.pkl")
+    all_parsed = []
+
+    org_urls = [
+        "https://site.com/org1/list",
+        "https://site.com/org2/list",
+        "https://site.com/org3/list"
+    ]
+    
+    for list_url in org_urls:
+        links = get_meeting_links(list_url, driver)
+        
+        for detail_url in links:
+            html = fetch_meeting_html(detail_url, driver)
+            text = extract_meeting_text(html)
+            text = normalize_text(text)
+            parsed_info = parse_meeting_info(text)
+            all_parsed.append(parsed_info)
+    
+    save_to_csv(all_parsed, "meeting_records.csv")
+    driver.quit()
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,107 @@
+좋습니다! 요청을 종합해서,
+**“사내 저성능 LLM용 효율적인 분석 Report 요약 프롬프트”**를 만들어드릴게요.
+
+⸻
+
+📄 프롬프트 작성 가이드
+
+1. 프롬프트 문장 (영어, 출력은 한글)
+
+You are an analyst.  
+Please summarize the following English report into Korean.  
+
+Focus on these three points separately:  
+1. Main Purpose (주요 목적)  
+2. Key Cause-and-Effect Relationships (핵심 원인-결과 관계)  
+3. Key Insights or Implications (핵심 시사점)  
+
+Each point should be summarized clearly and briefly.  
+Use bullet points if necessary.  
+Respond only in Korean.  
+
+Here is the report:
+{report_text}
+
+🔹 특징:
+	•	영어로 지시 → 이해력을 극대화
+	•	한국어로 출력 → 번역 + 요약까지 한번에
+	•	구조화된 출력 요구 → 저성능 LLM도 길을 잃지 않음
+
+⸻
+
+2. Python 코드 예시 (API 호출)
+
+import requests
+
+API_URL = "http://your-internal-api-endpoint"
+HEADERS = {
+    "Authorization": "Bearer YOUR_API_TOKEN",
+    "Content-Type": "application/json"
+}
+
+# Step 1: report.txt 파일 읽기
+with open("report.txt", "r", encoding="utf-8") as f:
+    report_text = f.read()
+
+# Step 2: Prompt 준비
+prompt = f"""
+You are an analyst.  
+Please summarize the following English report into Korean.
+
+Focus on these three points separately:
+1. Main Purpose (주요 목적)  
+2. Key Cause-and-Effect Relationships (핵심 원인-결과 관계)  
+3. Key Insights or Implications (핵심 시사점)
+
+Each point should be summarized clearly and briefly.
+Use bullet points if necessary.
+Respond only in Korean.
+
+Here is the report:
+{report_text}
+"""
+
+# Step 3: API 호출
+payload = {
+    "model": "your-llm-model-name",
+    "prompt": prompt,
+    "max_tokens": 2048,
+    "temperature": 0.3  # 정확성 중요 → 낮게 설정
+}
+
+response = requests.post(API_URL, headers=HEADERS, json=payload)
+response.raise_for_status()
+
+# Step 4: 결과 출력
+summary = response.json()["completion"]
+print(summary)
+
+
+
+⸻
+
+📌 추가 참고
+	•	temperature=0.3 정도로 설정하면 더 차분하고 명확하게 요약합니다.
+	•	report가 길면 max_tokens를 충분히 확보해야 해요 (예: 2048 이상).
+	•	필요하면, {주제}, {중점 포인트} 를 추가로 파라미터화해서 더 다이나믹하게 만들 수도 있어요.
+
+⸻
+
+추가로
+“주제(Topic)“나 “추가 질문”을 직접 지정하고 싶다면, 프롬프트에
+
+Additionally, summarize from the perspective of: {your_topic}
+
+를 삽입해줄 수 있어요.
+
+⸻
+
+✨ 정리
+
+“영어로 프롬프트, 한국어로 요약 출력, 핵심 3개 항목 별로 요청”
+→ 사내 저성능 LLM에서도 안정적 품질 기대 가능
+
+⸻
+
+필요하면 이걸 함수화 해서 “파일명”과 “주제”만 바꿔 자동으로 여러 리포트 돌리는 코드도 바로 만들어드릴 수 있어요.
+추가할까요? 🚀 (진짜 실무용으로 바로 쓸 수 있게)

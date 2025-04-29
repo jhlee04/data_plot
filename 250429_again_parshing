@@ -1,0 +1,59 @@
+import re
+import pandas as pd
+
+def parse_tasks(file_path):
+    with open(file_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+    tasks = []
+    current_task = None
+
+    for line in lines:
+        line = line.strip()
+
+        if re.match(r'^\d+\.', line):
+            # 과제 시작
+            if current_task:
+                tasks.append(current_task)
+
+            # 과제명과 담당자 분리
+            match = re.match(r'^\d+\.\s*(.+?)\s*\((.+?)\)', line)
+            if match:
+                title = match.group(1).strip()
+                owner = match.group(2).strip()
+            else:
+                title = line
+                owner = ''
+
+            current_task = {
+                '과제명': title,
+                '담당자': owner,
+                '세부내용': [],
+                'Action Item': []
+            }
+
+        elif line.startswith('-') and current_task:
+            current_task['세부내용'].append(line.lstrip('-').strip())
+
+        elif line.startswith('>') and current_task:
+            current_task['Action Item'].append(line.lstrip('>').strip())
+
+    if current_task:
+        tasks.append(current_task)
+
+    # DataFrame 변환
+    df = pd.DataFrame([{
+        '과제명': task['과제명'],
+        '담당자': task['담당자'],
+        '세부내용': '\n'.join(task['세부내용']),
+        'Action Item': '\n'.join(task['Action Item'])
+    } for task in tasks])
+
+    return df
+
+# 사용 예시
+if __name__ == "__main__":
+    file_path = 'your_file.txt'  # 파일 경로 입력
+    df = parse_tasks(file_path)
+    df.to_excel('parsed_tasks.xlsx', index=False)
+    print("완료! parsed_tasks.xlsx로 저장했습니다.")

@@ -1,0 +1,53 @@
+import win32com.client
+import os
+
+def extract_text_and_tables_from_ppt(ppt_path):
+    ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+    ppt_app.Visible = True  # 백그라운드 실행 시 False
+
+    if not os.path.exists(ppt_path):
+        print(f"[스킵] 파일 없음: {ppt_path}")
+        return
+
+    presentation = ppt_app.Presentations.Open(os.path.abspath(ppt_path))
+
+    extracted_data = []
+
+    for slide in presentation.Slides:
+        slide_data = {
+            "slide_num": slide.SlideIndex,
+            "texts": [],
+            "tables": []
+        }
+
+        for shape in slide.Shapes:
+            # 텍스트 상자
+            if shape.HasTextFrame:
+                if shape.TextFrame.HasText:
+                    text = shape.TextFrame.TextRange.Text.strip()
+                    if text:
+                        slide_data["texts"].append(text)
+
+            # 표 추출
+            elif shape.HasTable:
+                table = shape.Table
+                rows = table.Rows.Count
+                cols = table.Columns.Count
+
+                table_data = []
+                for i in range(1, rows + 1):
+                    row_data = []
+                    for j in range(1, cols + 1):
+                        cell = table.Cell(i, j)
+                        cell_text = cell.Shape.TextFrame.TextRange.Text.strip()
+                        row_data.append(cell_text)
+                    table_data.append(row_data)
+
+                slide_data["tables"].append(table_data)
+
+        extracted_data.append(slide_data)
+
+    presentation.Close()
+    ppt_app.Quit()
+
+    return extracted_data

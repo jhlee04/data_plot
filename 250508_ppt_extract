@@ -1,0 +1,97 @@
+import win32com.client
+import os
+import json
+import csv
+
+def close_open_presentation_if_exists(ppt_app, file_path):
+    for pres in ppt_app.Presentations:
+        if pres.FullName.lower() == os.path.abspath(file_path).lower():
+            pres.Close()
+            print(f"[알림] 기존 열려 있던 파일 닫음: {file_path}")
+
+def extract_text_and_tables_from_ppt(ppt_path):
+    ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+    ppt_app.Visible = False  # 백그라운드 실행
+
+    if not os.path.exists(ppt_path):
+        print(f"[스킵] 파일 없음: {ppt_path}")
+        return []
+
+    # 이미 열려 있던 프레젠테이션 닫기
+    close_open_presentation_if_exists(ppt_app, ppt_path)
+
+    presentation = ppt_app.Presentations.Open(os.path.abspath(ppt_path))
+    extracted_data = []
+
+    for slide in presentation.Slides:
+        slide_data = {
+            "slide_num": slide.SlideIndex,
+            "texts": [],
+            "tables": []
+        }
+
+        for shape in slide.Shapes:
+            if shape.HasTextFrame and shape.TextFrame.HasText:
+                text = shape.TextFrame.TextRange.Text.strip()
+                if text:
+                    slide_data["texts"].append(text)
+
+            elif shape.HasTable:
+                table = shape.Table
+                table_data = []
+                for i in range(1, table.Rows.Count + 1):
+                    row_data = []
+                    for j in range(1, table.Columns.Count + 1):
+                        cell_text = table.Cell(i, j).Shape.TextFrame.TextRange.Text.strip()
+                        row_data.append(cell_text)
+                    table_data.append(row_data)
+                slide_data["tables"].append(table_data)
+
+        extracted_data.append(slide_data)
+
+    presentation.Close()
+    ppt_app.Quit()
+    return extracted_data
+
+def save_as_json(data, output_path):
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def save_as_txt(data, output_path):
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for slide in data:
+            f.write(f"--- Slide {slide['slide_num']} ---\n")
+            f.write("Texts:\n")
+            for text in slide["texts"]:
+                f.write(f"- {text}\n")
+            f.write("Tables:\n")
+            for table in slide["tables"]:
+                for row in table:
+                    f.write("\t".join(row) + "\n")
+            f.write("\n")
+
+def save_as_csv(data, output_folder):
+    for slide in data:
+        slide_num = slide['slide_num']
+        csv_path = os.path.join(output_folder, f"slide_{slide_num}.csv")
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv.writer(f)
+            writer.writerow(["Texts"])
+            for text in slide["texts"]:
+                writer.writerow([text])
+            writer.writerow([])
+            for table in slide["tables"]:
+                writer.writerows(table)
+                writer.writerow([])
+
+# === 실행 예시 ===
+ppt_file = "your_presentation.pptx"
+output_folder = "output_ppt_data"
+os.makedirs(output_folder, exist_ok=True)
+
+extracted = extract_text_and_tables_from_ppt(ppt_file)
+save_as_json(extracted, os.path.join(output_folder, "slides.json"))
+save_as_txt(extracted, os.path.join(output_folder, "slides.txt"))
+save_as_csv(extracted, output_folder)
+
+print("✅ 추출 및 저장 완료")

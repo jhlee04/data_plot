@@ -1,0 +1,159 @@
+맞습니다.
+당신이 지적한 방식이 훨씬 더 효율적이고 안정적입니다.
+특히 win32com을 사용할 때는 PowerPoint를 장시간 열어두는 것보다 다음과 같이 처리하는 것이 좋습니다:
+
+⸻
+
+✅ 추천 워크플로우 구조 (2단계로 분리)
+
+1단계: 슬라이드 텍스트만 빠르게 일괄 추출
+	•	PPT를 열고 텍스트만 저장한 뒤 즉시 닫기
+	•	JSON이나 TXT 파일로 저장
+
+2단계: 저장된 텍스트 기반으로 LLM 요약 처리
+	•	슬라이드별 프롬프트 생성
+	•	LLM 추론
+	•	전체 발표 요약
+
+⸻
+
+✅ 전체 구조를 반영한 extract_and_prepare_prompts.py
+
+import win32com.client
+import os
+import json
+
+# STEP 1: PPT에서 텍스트만 추출 후 저장
+def extract_slide_texts(ppt_path):
+    ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+    ppt_app.Visible = False
+
+    if not os.path.exists(ppt_path):
+        raise FileNotFoundError(f"PPT 파일이 존재하지 않습니다: {ppt_path}")
+
+    presentation = ppt_app.Presentations.Open(ppt_path, WithWindow=False)
+    slide_texts = []
+
+    for i, slide in enumerate(presentation.Slides):
+        texts = []
+        for shape in slide.Shapes:
+            if shape.HasTextFrame and shape.TextFrame.HasText:
+                text = shape.TextFrame.TextRange.Text.strip()
+                if text:
+                    texts.append(text)
+        full_text = "\n".join(texts)
+        slide_texts.append({"slide_num": i + 1, "text": full_text})
+
+    presentation.Close()
+    ppt_app.Quit()
+
+    return slide_texts
+
+# STEP 2: 슬라이드별 요약 프롬프트 생성
+def generate_slide_prompt(slide):
+    return f"""
+당신은 기획 발표 문서를 요약하는 전문가입니다.  
+다음 슬라이드 텍스트를 읽고 아래의 질문에 답해주세요.  
+문맥을 넘겨짚지 말고, 제시된 내용 안에서만 추론하세요.
+
+[슬라이드 {slide['slide_num']} 텍스트 시작]
+{slide['text']}
+[슬라이드 {slide['slide_num']} 텍스트 끝]
+
+1. 이 슬라이드의 핵심 요지는 무엇인가요?
+2. 어떤 결론 또는 제안이 포함되어 있나요?
+3. 이 내용을 한 문장으로 요약해 주세요.
+
+[예시 출력]
+- 핵심 요지: ...
+- 결론 또는 제안: ...
+- 한 문장 요약: ...
+"""
+
+# STEP 3: 전체 요약용 프롬프트 생성
+def generate_total_summary_prompt(slide_summaries):
+    summary_lines = [
+        f"- 슬라이드 {s['slide_num']}: {s['short_summary']}" for s in slide_summaries
+    ]
+    summary_text = "\n".join(summary_lines)
+
+    return f"""
+당신은 발표 요약 전문가입니다. 아래는 슬라이드별 요약입니다. 이를 기반으로 전체 발표의 내용을 요약해주세요.
+
+[슬라이드 요약 시작]
+{summary_text}
+[슬라이드 요약 끝]
+
+1. 전체 발표의 목적은 무엇인가요?
+2. 전체 발표에서 가장 강조하는 메시지는 무엇인가요?
+3. 전체 발표 내용을 3문장 이내로 요약해 주세요.
+
+[예시 출력]
+- 발표 목적: ...
+- 핵심 메시지: ...
+- 전체 요약: ...
+"""
+
+# 실행 코드
+if __name__ == "__main__":
+    ppt_path = "C:/Users/yourname/Desktop/sample.pptx"  # 경로 수정 필요
+    output_text_path = "slides_texts.json"
+    output_prompts_path = "slide_prompts.json"
+
+    print(">> 1단계: PPT 텍스트 추출 중...")
+    slides = extract_slide_texts(ppt_path)
+
+    # 슬라이드 텍스트만 저장
+    with open(output_text_path, "w", encoding="utf-8") as f:
+        json.dump(slides, f, ensure_ascii=False, indent=2)
+    print(f">> 슬라이드 텍스트 저장 완료: {output_text_path}")
+
+    # 슬라이드별 프롬프트 생성
+    prompts = [
+        {"slide_num": slide["slide_num"], "prompt": generate_slide_prompt(slide)}
+        for slide in slides
+    ]
+    with open(output_prompts_path, "w", encoding="utf-8") as f:
+        json.dump(prompts, f, ensure_ascii=False, indent=2)
+    print(f">> 슬라이드 프롬프트 저장 완료: {output_prompts_path}")
+
+    print(">> 이후 단계: slide_prompts.json 기반으로 LLM 요약 수행 → summary_list 생성")
+    print(">> summary_list 기반으로 generate_total_summary_prompt() 호출")
+
+
+
+⸻
+
+✅ 이후 사용 예시 (2단계)
+	1.	slide_prompts.json을 LLM에 붙여 슬라이드별 요약 진행
+	2.	요약 결과를 수동 또는 자동으로 다음 구조로 저장:
+
+slide_summaries = [
+    {"slide_num": 1, "short_summary": "슬라이드1 요약 결과"},
+    {"slide_num": 2, "short_summary": "슬라이드2 요약 결과"},
+    ...
+]
+
+	3.	그 뒤에 아래와 같이 전체 요약 생성:
+
+total_prompt = generate_total_summary_prompt(slide_summaries)
+with open("total_summary_prompt.txt", "w", encoding="utf-8") as f:
+    f.write(total_prompt)
+
+
+
+⸻
+
+장점 요약:
+
+기존 방식	개선된 방식
+LLM 호출 전에 PPT 계속 열어둬야 함	PPT는 빠르게 열고 즉시 종료
+LLM 실행 중 오류 나면 다시 PPT 열어야 함	텍스트만 저장해두면 재사용 가능
+슬라이드별 반복 구조	이후 작업은 병렬 or 일괄 처리 가능
+
+
+
+⸻
+
+이 구조로 충분히 안정성과 유지보수성, 속도 모두 확보할 수 있습니다.
+슬라이드별 요약 예시 JSON 양식이나 자동 요약 코드도 원하시면 이어서 만들어드릴까요?
